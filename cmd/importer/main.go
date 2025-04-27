@@ -1,15 +1,16 @@
 package main
 
 import (
-	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
-	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 
 	library_proto "github.com/noitcelfer7/library-proto/gen/go/proto/library"
 
@@ -34,7 +35,25 @@ func main() {
 
 	target := net.JoinHostPort(config.Grpc.Client.Host, config.Grpc.Client.Port)
 
-	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	caCert, err := os.ReadFile("ca-cert.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("Failed to add CA certificate")
+	}
+
+		// Конфигурация TLS
+		tlsConfig := &tls.Config{
+			RootCAs: certPool,
+		}
+
+	creds := credentials.NewTLS(tlsConfig)
+
+
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(creds))
 
 	if err != nil {
 		panic(fmt.Sprintf("grpc.NewClient Error: %v", err))
@@ -44,9 +63,5 @@ func main() {
 
 	cc := library_proto.NewDataExchangeServiceClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-
-	defer cancel()
-
-	server.Serve(&config, cc, ctx)
+	server.Serve(&config, cc)
 }

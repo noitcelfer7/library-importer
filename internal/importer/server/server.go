@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	library_proto "github.com/noitcelfer7/library-proto/gen/go/proto/library"
 
@@ -14,16 +15,20 @@ import (
 	"library_importer/internal/importer/sqlite"
 )
 
-func Serve(config *config.Config, cc library_proto.DataExchangeServiceClient, ctx context.Context) {
-	http.HandleFunc("/upload", uploadHandler(cc, ctx))
+func Serve(config *config.Config, cc library_proto.DataExchangeServiceClient) {
+	http.HandleFunc("/upload", uploadHandler(cc))
 
 	addr := net.JoinHostPort(config.Http.Server.Host, config.Http.Server.Port)
 
 	http.ListenAndServe(addr, nil)
 }
 
-func uploadHandler(cc library_proto.DataExchangeServiceClient, ctx context.Context) http.HandlerFunc {
+func uploadHandler(cc library_proto.DataExchangeServiceClient) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+
+		defer cancel()
+
 		if request.Method != http.MethodPost {
 			http.Error(writer, "uploadHandler Error: request != http.MethodPost", http.StatusMethodNotAllowed)
 

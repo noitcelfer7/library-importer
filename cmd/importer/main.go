@@ -2,35 +2,51 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"log"
+	"net"
+	"os"
 	"time"
 
-	library_proto "github.com/noitcelfer7/library-proto/gen/go/proto/library"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	library_proto "github.com/noitcelfer7/library-proto/gen/go/proto/library"
+
+	"library_importer/internal/importer/config"
+	"library_importer/internal/importer/server"
 )
 
 func main() {
-	conn, err := grpc.NewClient("127.0.0.1:12345", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	data, err := os.ReadFile("config.json")
 
 	if err != nil {
-		fmt.Printf("NewClient Error, %v", err)
+		panic(fmt.Sprintf("os.ReadFile Error: %v", err))
+	}
 
-		return
+	var config = config.Config{}
+
+	err = json.Unmarshal(data, &config)
+
+	if err != nil {
+		panic(fmt.Sprintf("json.Unmarshal Error: %v", err))
+	}
+
+	target := net.JoinHostPort(config.Grpc.Client.Host, config.Grpc.Client.Port)
+
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	if err != nil {
+		panic(fmt.Sprintf("grpc.NewClient Error: %v", err))
 	}
 
 	defer conn.Close()
 
-	client := library_proto.NewDataExchangeServiceClient(conn)
+	cc := library_proto.NewDataExchangeServiceClient(conn)
 
-	request := &library_proto.ExchangeRequest{
-		AuthorFirstName: "Kee",
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	response, _ := client.Exchange(ctx, request)
-
-	log.Printf("%v", response)
+	server.Serve(&config, cc, ctx)
 }
